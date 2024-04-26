@@ -1,14 +1,19 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { User, UsersDocument } from './schema/users.schema';
 import { Model } from 'mongoose';
+import { sleep } from 'src/sleep';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 
 @Injectable()
 export class UsersService {
 
-  constructor(@InjectModel(User.name) private usersModel: Model<UsersDocument>) { }
+  constructor(
+    @Inject(CACHE_MANAGER) private cacheManager, //: Cache,
+    @InjectModel(User.name) private usersModel: Model<UsersDocument>
+  ) { }
 
   async create(createUserDto: CreateUserDto): Promise<User> {
     const createdUser = new this.usersModel(createUserDto);
@@ -16,7 +21,20 @@ export class UsersService {
   }
 
   async findAll(): Promise<User[]> {
-    return this.usersModel.find().exec();
+    const key = 'users-find-all';
+    const usersCached = await this.cacheManager.get(key);
+
+    if (usersCached) {
+      return usersCached;
+    }
+
+    const users = await this.usersModel.find().exec();
+
+    // await sleep(10000)
+
+    await this.cacheManager.set(key, users);
+
+    return users;
   }
 
   async findOne(id: string): Promise<User> {
